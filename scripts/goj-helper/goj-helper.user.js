@@ -15,6 +15,8 @@
 // @license      All Rights Reserved
 // @homepageURL  https://github.com/Sleepingzzz2148/useful-addons
 // @supportURL   https://github.com/Sleepingzzz2148/useful-addons/issues
+// @downloadURL  https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-helper.user.js
+// @updateURL    https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-helper.user.js
 // @grant        GM.cookie
 // @grant        GM_cookie
 // @connect      vjudge.net

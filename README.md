@@ -30,4 +30,4 @@
 - 用于商业用途；
 - 改名后重新发布。
 
-Copyright © 2025 Sleeping_zzz. All rights reserved.
+Copyright © 2026 Sleeping_zzz. All rights reserved.
