@@ -23,6 +23,28 @@
 // @run-at       document-end
 // ==/UserScript==
 
+/*
+ * Copyright (c) 2026 Sleeping_zzz
+ *
+ * All rights reserved.
+ *
+ * This project and its userscripts are provided for personal use only.
+ *
+ * You may:
+ * - install and use the userscripts for personal use;
+ * - report bugs or suggest improvements;
+ * - share the original GitHub repository link.
+ *
+ * You may not, without explicit written permission from the author:
+ * - copy and redistribute the userscripts;
+ * - modify and publish modified versions;
+ * - remove or alter copyright notices;
+ * - publish the userscripts on other platforms;
+ * - sell, rent, sublicense, or use the userscripts for commercial purposes.
+ *
+ * For permission requests, please contact the author.
+ */
+
 (function () {
     'use strict';
 

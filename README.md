@@ -7,6 +7,7 @@
 | 名称 | 简介 | 安装 |
 |---|---|---|
 | Goj helper | 在 GOJ 页面左下角添加按钮，自动读取 vjudge.net 的 JSESSIONID 并绑定到 GOJ | [安装](https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-helper.user.js) |
+| adofai in luogu | 在洛谷页面中添加 ADOFAI 风格的难度图标和 AC 动画 | [安装](https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/adofai-in-luogu.user.js) |
 
 ## 使用方法
 
