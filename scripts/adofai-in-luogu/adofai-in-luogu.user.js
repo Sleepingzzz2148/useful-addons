@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         adofai in luogu
 // @namespace    http://tampermonkey.net/
-// @version      1.1.0
+// @version      1.1.1
 // @description  adofai in luogu
 // @author       Sleeping_zzz2148
 // @match        https://www.luogu.com.cn/*
@@ -56,7 +56,7 @@ const DIFF_ICON_BASE64 = "https://api.tuforums.com/v2/media/image/icon/";
             if (color == "rgb(243, 156, 17)"||s=="普及−") lvl = calclv(8, 17);
             if (color == "rgb(255, 193, 22)"||s=="普及") lvl = calclv(15, 24);
             if (color == "rgb(83, 196, 26)"||s=="普及+/提高-") lvl = calclv(22, 31);
-            if (color == "rgb(19, 194, 194)"||S=="提高") lvl = calclv(29, 38);
+            if (color == "rgb(19, 194, 194)"||s=="提高") lvl = calclv(29, 38);
             if (color == "rgb(52, 152, 219)"||s=="提高+/省选−") lvl=calclv(36, 45);
             if (color == "rgb(156, 61, 207)"||s=="省选/NOI−") lvl=calclv(43, 52);
             if (color == "rgb(14, 29, 105)"||s=="NOI/NOI+/CTS") lvl=calclv(50, 59);
