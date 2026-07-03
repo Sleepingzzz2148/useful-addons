@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         adofai in luogu
 // @namespace    http://tampermonkey.net/
-// @version      1.1.1
+// @version      1.2.0
 // @description  adofai in luogu
 // @author       Sleeping_zzz2148
 // @match        https://www.luogu.com.cn/*
@@ -52,15 +52,15 @@ const DIFF_ICON_BASE64 = "https://api.tuforums.com/v2/media/image/icon/";
         let lvl = 0;
         // if (s == "暂无评定" || s == "入门" || s == "普及−" || s == "普及/提高−" || s == "普及+/提高" || s == "提高+/省选−" || s == "省选/NOI-" || s == "NOI/NOI+/CTSC" || s.includes("EZ") || s.includes("HD") || s.includes("IN") || s.includes("AT")) {
             let color = lv.style.backgroundColor == "" ? lv.style.color : lv.style.backgroundColor;
-            if (color == "rgb(254, 76, 97)"||s=="入门") lvl = calclv(1, 10);
-            if (color == "rgb(243, 156, 17)"||s=="普及−") lvl = calclv(8, 17);
-            if (color == "rgb(255, 193, 22)"||s=="普及") lvl = calclv(15, 24);
-            if (color == "rgb(83, 196, 26)"||s=="普及+/提高-") lvl = calclv(22, 31);
-            if (color == "rgb(19, 194, 194)"||s=="提高") lvl = calclv(29, 38);
-            if (color == "rgb(52, 152, 219)"||s=="提高+/省选−") lvl=calclv(36, 45);
-            if (color == "rgb(156, 61, 207)"||s=="省选/NOI−") lvl=calclv(43, 52);
-            if (color == "rgb(14, 29, 105)"||s=="NOI/NOI+/CTS") lvl=calclv(50, 59);
-            if (color == "rgb(232, 232, 232)"||s=="暂无评定") lvl = 0;
+            if (color == "rgb(254, 76, 97)"||s.includes("入门")) lvl = calclv(1, 10);
+            if (color == "rgb(255, 193, 22)"||s.includes("普及")) lvl = calclv(15, 24);
+            if (color == "rgb(19, 194, 194)"||s.includes("提高")) lvl = calclv(29, 38);
+            if (color == "rgb(243, 156, 17)"||s.includes("普及−")) lvl = calclv(8, 17);
+            if (color == "rgb(83, 196, 26)"||s.includes("普及+/提高-")) lvl = calclv(22, 31);
+            if (color == "rgb(52, 152, 219)"||s.includes("提高+/省选−")) lvl=calclv(36, 45);
+            if (color == "rgb(156, 61, 207)"||s.includes("省选/NOI−")) lvl=calclv(43, 52);
+            if (color == "rgb(14, 29, 105)"||s.includes("NOI/NOI+/CTS")) lvl=calclv(50, 59);
+            if (color == "rgb(232, 232, 232)"||s.includes("暂无评定")) lvl = 0;
             // lv.style.fontFamily='Saira';
         // }
         if(lvl != 0 && lv.style.backgroundColor != "" && lv.style.backgroundColor != "rgb(255, 255, 255)")lv.style.color = lv.style.backgroundColor;
