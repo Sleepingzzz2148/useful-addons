@@ -162,6 +162,9 @@
                         .${SCRIPT_PREFIX}-batch-bar{margin:0 0 .75em 0;padding:.75em 1em;border:1px solid rgba(255,255,255,.12);border-radius:4px;background:rgba(255,255,255,.04);display:flex;gap:.75em;align-items:center;flex-wrap:wrap}.${SCRIPT_PREFIX}-batch-status{color:#9aa4b2;font-size:13px}.${SCRIPT_PREFIX}-batch-status.error{color:#cb2431}.${SCRIPT_PREFIX}-batch-status.success{color:#22863a}.${SCRIPT_PREFIX}-batch-bar .button[disabled]{opacity:.62;cursor:not-allowed}
 
     `;
+        style.textContent += `
+            .${SCRIPT_PREFIX}-line.${SCRIPT_PREFIX}-line-main{stroke:#d6d6d6}.${SCRIPT_PREFIX}-line.${SCRIPT_PREFIX}-line-compare{stroke:#4ea1ff;stroke-dasharray:5 4}.${SCRIPT_PREFIX}-dot.${SCRIPT_PREFIX}-dot-compare{stroke:#4ea1ff;stroke-width:2}.${SCRIPT_PREFIX}-h2h-input{width:10em;max-width:42vw;padding:.2em .35em;border:1px solid rgba(255,255,255,.22);border-radius:3px;background:#1f252b;color:#dce5ef}.${SCRIPT_PREFIX}-h2h-input:disabled{opacity:.55}.${SCRIPT_PREFIX}-chart-legend{display:inline-flex;align-items:center;gap:.35em}.${SCRIPT_PREFIX}-chart-legend::before{content:"";display:inline-block;width:1.8em;height:0;border-top:2px solid currentColor}.${SCRIPT_PREFIX}-chart-legend-main{color:#d6d6d6}.${SCRIPT_PREFIX}-chart-legend-compare{color:#4ea1ff}.${SCRIPT_PREFIX}-chart-legend-compare::before{border-top-style:dashed}
+        `;
         document.documentElement.appendChild(style);
         state.cssInjected = true;
     }
@@ -685,21 +688,30 @@
         return thresholds.map(band => ({ ...band, to: Math.min(band.to, maxR) })).filter(band => band.from < maxR && band.to > 0);
     }
 
-    function makeSvgChart(records, zoom = 1) {
+    function makeSvgChart(records, zoom = 1, compareRecords = []) {
         const height = 260;
         const pad = { l: 48, r: 18, t: 20, b: 36 };
+        const compareEnabled = Array.isArray(compareRecords) && compareRecords.length > 0;
+        const allRecords = records.concat(compareEnabled ? compareRecords : []);
+        const allTimes = allRecords.map(r => Number(r.time) || 0).filter(t => t > 0);
+        const minTime = allTimes.length ? Math.min(...allTimes) : 0;
+        const maxTime = allTimes.length ? Math.max(...allTimes) : minTime;
+        const timeSpan = Math.max(1, maxTime - minTime);
+        const pointCountForWidth = compareEnabled ? Math.max(records.length, compareRecords.length, 7) : Math.max(records.length, 7);
         const pointGap = 12 * zoom;
-        const width = Math.round(pad.l + pad.r + Math.max(6, records.length - 1) * pointGap);
+        const width = Math.round(pad.l + pad.r + Math.max(6, pointCountForWidth - 1) * pointGap);
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('viewBox', `0 0 ${width} ${height}`);
         svg.setAttribute('width', String(width));
         svg.setAttribute('height', String(height));
         svg.setAttribute('role', 'img');
         svg.setAttribute('aria-label', 'GOJ local rating chart');
-        const ratings = records.map(r => Number(r.newRating) || 0);
+        const ratings = allRecords.map(r => Number(r.newRating) || 0);
         const minR = Math.max(0, Math.floor((Math.min(...ratings, 0) - 100) / 100) * 100);
         const maxR = Math.max(400, Math.ceil((Math.max(...ratings, CENTER) + 100) / 100) * 100);
-        const xOf = i => records.length <= 1 ? (pad.l + width - pad.r) / 2 : pad.l + (width - pad.l - pad.r) * i / (records.length - 1);
+        const xByIndex = (series, i) => series.length <= 1 ? (pad.l + width - pad.r) / 2 : pad.l + (width - pad.l - pad.r) * i / (series.length - 1);
+        const xByTime = r => maxTime === minTime ? (pad.l + width - pad.r) / 2 : pad.l + (width - pad.l - pad.r) * ((Number(r.time) || minTime) - minTime) / timeSpan;
+        const xOf = (series, i) => compareEnabled ? xByTime(series[i]) : xByIndex(series, i);
         const yOf = r => height - pad.b - (height - pad.t - pad.b) * (r - minR) / Math.max(1, maxR - minR);
         function el(name, attrs, children) {
             const n = document.createElementNS('http://www.w3.org/2000/svg', name);
@@ -728,21 +740,38 @@
             label.textContent = String(r);
             svg.appendChild(label);
         }
+        if (compareEnabled) {
+            const tickTimes = [minTime, maxTime].filter((t, i, arr) => t > 0 && arr.indexOf(t) === i);
+            for (const t of tickTimes) {
+                const x = xByTime({ time: t });
+                svg.appendChild(el('line', { x1: x, y1: height - pad.b, x2: x, y2: height - pad.b + 5, class: `${SCRIPT_PREFIX}-axis` }));
+                const label = el('text', { x: Math.max(4, Math.min(width - 86, x - 30)), y: height - 10, class: `${SCRIPT_PREFIX}-chart-label` });
+                label.textContent = new Date(t).toLocaleDateString();
+                svg.appendChild(label);
+            }
+        }
         svg.appendChild(el('line', { x1: pad.l, y1: pad.t, x2: pad.l, y2: height - pad.b, class: `${SCRIPT_PREFIX}-axis` }));
         svg.appendChild(el('line', { x1: pad.l, y1: height - pad.b, x2: width - pad.r, y2: height - pad.b, class: `${SCRIPT_PREFIX}-axis` }));
-        const d = records.map((r, i) => `${i ? 'L' : 'M'}${xOf(i).toFixed(2)},${yOf(r.newRating).toFixed(2)}`).join(' ');
-        svg.appendChild(el('path', { d, class: `${SCRIPT_PREFIX}-line` }));
-        records.forEach((r, i) => {
-            const x = xOf(i);
-            const y = yOf(r.newRating);
-            const dot = el('circle', { cx: x, cy: y, r: 4, class: `${SCRIPT_PREFIX}-dot ${cssRatingClass(r.newRating)}` });
-            dot.setAttribute('fill', chartPointColor(r.newRating));
-            dot.dataset.index = String(i);
-            svg.appendChild(dot);
-            const hit = el('circle', { cx: x, cy: y, r: 12, class: `${SCRIPT_PREFIX}-hit` });
-            hit.dataset.index = String(i);
-            svg.appendChild(hit);
-        });
+        const drawSeries = (series, seriesName, lineClass, dotClass) => {
+            if (!series.length) return;
+            const d = series.map((r, i) => `${i ? 'L' : 'M'}${xOf(series, i).toFixed(2)},${yOf(r.newRating).toFixed(2)}`).join(' ');
+            svg.appendChild(el('path', { d, class: `${SCRIPT_PREFIX}-line ${lineClass}` }));
+            series.forEach((r, i) => {
+                const x = xOf(series, i);
+                const y = yOf(r.newRating);
+                const dot = el('circle', { cx: x, cy: y, r: 4, class: `${SCRIPT_PREFIX}-dot ${dotClass} ${cssRatingClass(r.newRating)}` });
+                dot.setAttribute('fill', seriesName === 'compare' ? '#4ea1ff' : chartPointColor(r.newRating));
+                dot.dataset.series = seriesName;
+                dot.dataset.index = String(i);
+                svg.appendChild(dot);
+                const hit = el('circle', { cx: x, cy: y, r: 12, class: `${SCRIPT_PREFIX}-hit` });
+                hit.dataset.series = seriesName;
+                hit.dataset.index = String(i);
+                svg.appendChild(hit);
+            });
+        };
+        drawSeries(records, 'main', `${SCRIPT_PREFIX}-line-main`, `${SCRIPT_PREFIX}-dot-main`);
+        if (compareEnabled) drawSeries(compareRecords, 'compare', `${SCRIPT_PREFIX}-line-compare`, `${SCRIPT_PREFIX}-dot-compare`);
         return svg;
     }
 
@@ -883,9 +912,9 @@
             else section.insertAdjacentElement('afterend', box);
         }
         const records = userRecords(db, userId);
-        const recordsSig = records.map(r => `${r.contestId}:${r.time}:${r.oldRating}:${r.newRating}:${r.performance}:${r.rank}:${r.score}`).join('|');
-        if (box.dataset.recordsSig === recordsSig && box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)) return;
-        box.dataset.recordsSig = recordsSig;
+        const allRecordsSig = Object.values(db.records || {}).map(r => `${r.contestId}:${r.userId}:${r.time}:${r.oldRating}:${r.newRating}:${r.performance}:${r.rank}:${r.score}`).sort().join('|');
+        if (box.dataset.recordsSig === allRecordsSig && box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)) return;
+        box.dataset.recordsSig = allRecordsSig;
         box.innerHTML = '<div class="section__header"><h1 class="section__title">GOJ Rating</h1></div><div class="section__body"></div>';
         const body = box.querySelector('.section__body');
         if (!records.length) {
@@ -910,6 +939,29 @@
         zoomInput.step = '0.25';
         zoomInput.value = box.dataset.zoom || '1';
         const zoomValue = document.createElement('span');
+        const h2hLabel = document.createElement('label');
+        h2hLabel.style.display = 'inline-flex';
+        h2hLabel.style.alignItems = 'center';
+        h2hLabel.style.gap = '.3em';
+        const h2hToggle = document.createElement('input');
+        h2hToggle.type = 'checkbox';
+        h2hToggle.checked = box.dataset.h2hEnabled === '1';
+        const h2hText = document.createElement('span');
+        h2hText.textContent = 'head-to-head';
+        h2hLabel.append(h2hToggle, h2hText);
+        const h2hInput = document.createElement('input');
+        h2hInput.type = 'text';
+        h2hInput.className = `${SCRIPT_PREFIX}-h2h-input`;
+        h2hInput.placeholder = '对比用户 ID';
+        h2hInput.value = box.dataset.h2hUser || '';
+        h2hInput.disabled = !h2hToggle.checked;
+        const h2hStatus = document.createElement('span');
+        h2hStatus.className = `${SCRIPT_PREFIX}-batch-status`;
+        const mainLegend = document.createElement('span');
+        mainLegend.className = `${SCRIPT_PREFIX}-chart-legend ${SCRIPT_PREFIX}-chart-legend-main`;
+        mainLegend.textContent = userId;
+        const compareLegend = document.createElement('span');
+        compareLegend.className = `${SCRIPT_PREFIX}-chart-legend ${SCRIPT_PREFIX}-chart-legend-compare`;
         const viewport = document.createElement('div');
         viewport.className = `${SCRIPT_PREFIX}-chart-viewport`;
         const tooltip = document.createElement('div');
@@ -918,14 +970,26 @@
 
         const renderChart = () => {
             const zoom = Number(zoomInput.value) || 1;
+            const compareUserId = h2hInput.value.trim();
+            const compareEnabled = h2hToggle.checked && compareUserId && compareUserId !== userId;
+            const compareRecords = compareEnabled ? userRecords(db, compareUserId) : [];
             box.dataset.zoom = String(zoom);
+            box.dataset.h2hEnabled = h2hToggle.checked ? '1' : '0';
+            box.dataset.h2hUser = compareUserId;
             zoomValue.textContent = `${zoom.toFixed(2).replace(/\.00$/, '')}×`;
+            h2hInput.disabled = !h2hToggle.checked;
+            compareLegend.textContent = compareEnabled && compareRecords.length ? compareUserId : '';
+            compareLegend.style.display = compareEnabled && compareRecords.length ? 'inline-flex' : 'none';
+            h2hStatus.textContent = compareEnabled ? (compareRecords.length ? `已按时间对齐对比 ${compareRecords.length} 条记录` : '未找到该用户 rating 记录') : '';
+            h2hStatus.className = `${SCRIPT_PREFIX}-batch-status${compareEnabled && !compareRecords.length ? ' error' : ''}`;
             Array.from(viewport.querySelectorAll('svg')).forEach(svg => svg.remove());
-            const svg = makeSvgChart(records, zoom);
-            const showTooltip = (event, index) => {
-                const record = records[Number(index)];
+            const svg = makeSvgChart(records, zoom, compareRecords);
+            const showTooltip = (event, seriesName, index) => {
+                const source = seriesName === 'compare' ? compareRecords : records;
+                const record = source[Number(index)];
                 if (!record) return;
-                tooltip.innerHTML = formatChartTooltip(record);
+                const name = seriesName === 'compare' ? compareUserId : userId;
+                tooltip.innerHTML = `<div><strong>${escapeHtml(name)}</strong></div>` + formatChartTooltip(record);
                 tooltip.style.display = 'block';
                 const viewportRect = viewport.getBoundingClientRect();
                 const tooltipRect = tooltip.getBoundingClientRect();
@@ -942,13 +1006,15 @@
                     tooltip.style.display = 'none';
                     return;
                 }
-                showTooltip(event, target.dataset.index);
+                showTooltip(event, target.dataset.series || 'main', target.dataset.index);
             });
             viewport.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
             viewport.appendChild(svg);
         };
         zoomInput.addEventListener('input', renderChart);
-        toolbar.append(zoomLabel, zoomInput, zoomValue);
+        h2hToggle.addEventListener('change', renderChart);
+        h2hInput.addEventListener('input', renderChart);
+        toolbar.append(zoomLabel, zoomInput, zoomValue, h2hLabel, h2hInput, h2hStatus, mainLegend, compareLegend);
         body.appendChild(toolbar);
         body.appendChild(viewport);
         renderChart();
