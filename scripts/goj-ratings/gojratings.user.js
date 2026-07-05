@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GOJ AtCoder Rating
 // @namespace    https://www.goj.wiki/
-// @version      1.0.0
+// @version      1.1.0
 // @description  在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、rating 曲线与批量导入工具
 // @author       Sleeping_zzz2148
 // @match        https://www.goj.wiki/*
@@ -164,6 +164,7 @@
     `;
         style.textContent += `
             .${SCRIPT_PREFIX}-line.${SCRIPT_PREFIX}-line-main{stroke:#d6d6d6}.${SCRIPT_PREFIX}-line.${SCRIPT_PREFIX}-line-compare{stroke:#4ea1ff;stroke-dasharray:5 4}.${SCRIPT_PREFIX}-dot.${SCRIPT_PREFIX}-dot-compare{stroke:#4ea1ff;stroke-width:2}.${SCRIPT_PREFIX}-h2h-input{width:10em;max-width:42vw;padding:.2em .35em;border:1px solid rgba(255,255,255,.22);border-radius:3px;background:#1f252b;color:#dce5ef}.${SCRIPT_PREFIX}-h2h-input:disabled{opacity:.55}.${SCRIPT_PREFIX}-chart-legend{display:inline-flex;align-items:center;gap:.35em}.${SCRIPT_PREFIX}-chart-legend::before{content:"";display:inline-block;width:1.8em;height:0;border-top:2px solid currentColor}.${SCRIPT_PREFIX}-chart-legend-main{color:#d6d6d6}.${SCRIPT_PREFIX}-chart-legend-compare{color:#4ea1ff}.${SCRIPT_PREFIX}-chart-legend-compare::before{border-top-style:dashed}
+            .${SCRIPT_PREFIX}-chart-title-row{display:flex;align-items:center;gap:.6em;flex-wrap:wrap}.${SCRIPT_PREFIX}-rank-btn{font-size:12px;line-height:1.35;padding:.25em .65em}.${SCRIPT_PREFIX}-rank-modal{position:fixed;inset:0;z-index:99999;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.55);padding:1.5em}.${SCRIPT_PREFIX}-rank-modal.is-open{display:flex}.${SCRIPT_PREFIX}-rank-dialog{width:min(760px,96vw);max-height:86vh;display:flex;flex-direction:column;border:1px solid rgba(255,255,255,.16);border-radius:6px;background:#252b32;box-shadow:0 18px 52px rgba(0,0,0,.45);color:#dce5ef}.${SCRIPT_PREFIX}-rank-header{display:flex;align-items:center;justify-content:space-between;gap:1em;padding:.85em 1em;border-bottom:1px solid rgba(255,255,255,.12)}.${SCRIPT_PREFIX}-rank-header h2{margin:0;font-size:18px}.${SCRIPT_PREFIX}-rank-close{border:0;background:transparent;color:#dce5ef;font-size:24px;line-height:1;cursor:pointer}.${SCRIPT_PREFIX}-rank-filter{display:flex;align-items:center;gap:.65em;flex-wrap:wrap;padding:.75em 1em;border-bottom:1px solid rgba(255,255,255,.1);color:#9aa4b2;font-size:13px}.${SCRIPT_PREFIX}-rank-filter label{display:inline-flex;align-items:center;gap:.3em}.${SCRIPT_PREFIX}-rank-filter input{width:5.5em;padding:.2em .35em;border:1px solid rgba(255,255,255,.22);border-radius:3px;background:#1f252b;color:#dce5ef}.${SCRIPT_PREFIX}-rank-filter-summary{margin-left:auto}.${SCRIPT_PREFIX}-rank-body{overflow:auto;padding:0 1em 1em}.${SCRIPT_PREFIX}-rank-table{width:100%;border-collapse:collapse}.${SCRIPT_PREFIX}-rank-table th,.${SCRIPT_PREFIX}-rank-table td{padding:.55em .45em;border-bottom:1px solid rgba(255,255,255,.08);text-align:left}.${SCRIPT_PREFIX}-rank-table th{position:sticky;top:0;background:#252b32;z-index:1}.${SCRIPT_PREFIX}-rank-table td:nth-child(1),.${SCRIPT_PREFIX}-rank-table td:nth-child(3),.${SCRIPT_PREFIX}-rank-table th:nth-child(1),.${SCRIPT_PREFIX}-rank-table th:nth-child(3){text-align:right}.${SCRIPT_PREFIX}-rank-empty{padding:1.25em 0;color:#9aa4b2}
         `;
         document.documentElement.appendChild(style);
         state.cssInjected = true;
@@ -674,6 +675,108 @@
         return Object.values(db.records || {}).filter(r => String(r.userId) === String(userId)).sort((a, b) => (a.time || 0) - (b.time || 0));
     }
 
+    function userUrl(userId) {
+        return `/user/${encodeURIComponent(String(userId))}`;
+    }
+
+    function ratingLeaderboard(db, filters = {}) {
+        const now = Date.now();
+        const recentDays = Math.max(0, Number(filters.recentDays) || 0);
+        const minContests = Math.max(0, Math.floor(Number(filters.minContests) || 0));
+        const minLastTime = recentDays > 0 ? now - recentDays * 24 * 60 * 60 * 1000 : 0;
+        return Object.values(db.userStates || {})
+            .filter(u => u && u.userId && Number.isFinite(Number(u.rating)))
+            .map(u => ({
+                userId: String(u.userId),
+                username: u.username || String(u.userId),
+                rating: roundInt(Number(u.rating), 0),
+                contests: Number(u.contests) || 0,
+                lastTime: Number(u.lastTime) || 0,
+            }))
+            .filter(u => u.contests >= minContests && (!minLastTime || u.lastTime >= minLastTime))
+            .sort((a, b) => b.rating - a.rating || b.contests - a.contests || a.username.localeCompare(b.username) || a.userId.localeCompare(b.userId));
+    }
+
+    function readLeaderboardFilters(modal) {
+        return {
+            recentDays: Math.max(0, Number(modal.querySelector(`.${SCRIPT_PREFIX}-rank-recent-days`)?.value) || 0),
+            minContests: Math.max(0, Math.floor(Number(modal.querySelector(`.${SCRIPT_PREFIX}-rank-min-contests`)?.value) || 0)),
+        };
+    }
+
+    function ensureLeaderboardModal(db) {
+        let modal = document.getElementById(`${SCRIPT_PREFIX}-rank-modal`);
+        if (!modal) {
+            modal = document.createElement('div');
+            modal.id = `${SCRIPT_PREFIX}-rank-modal`;
+            modal.className = `${SCRIPT_PREFIX}-rank-modal`;
+            modal.innerHTML = `<div class="${SCRIPT_PREFIX}-rank-dialog" role="dialog" aria-modal="true" aria-labelledby="${SCRIPT_PREFIX}-rank-title"><div class="${SCRIPT_PREFIX}-rank-header"><h2 id="${SCRIPT_PREFIX}-rank-title">GOJ Rating 排行榜</h2><button type="button" class="${SCRIPT_PREFIX}-rank-close" aria-label="关闭排行榜">×</button></div><div class="${SCRIPT_PREFIX}-rank-filter"><label>最近 <input type="number" min="0" step="1" value="365" class="${SCRIPT_PREFIX}-rank-recent-days"> 天内有统计比赛</label><label>比赛数量 ≥ <input type="number" min="0" step="1" value="1" class="${SCRIPT_PREFIX}-rank-min-contests"></label><button type="button" class="button ${SCRIPT_PREFIX}-rank-apply">筛选</button><span class="${SCRIPT_PREFIX}-rank-filter-summary"></span></div><div class="${SCRIPT_PREFIX}-rank-body"></div></div>`;
+            document.body.appendChild(modal);
+            const close = () => modal.classList.remove('is-open');
+            modal.querySelector(`.${SCRIPT_PREFIX}-rank-close`).addEventListener('click', close);
+            modal.addEventListener('click', event => {
+                if (event.target === modal) close();
+            });
+            document.addEventListener('keydown', event => {
+                if (event.key === 'Escape' && modal.classList.contains('is-open')) close();
+            });
+            modal.querySelector(`.${SCRIPT_PREFIX}-rank-apply`).addEventListener('click', () => renderLeaderboard(modal, loadDb()));
+            for (const input of Array.from(modal.querySelectorAll(`.${SCRIPT_PREFIX}-rank-recent-days, .${SCRIPT_PREFIX}-rank-min-contests`))) {
+                input.addEventListener('keydown', event => {
+                    if (event.key === 'Enter') renderLeaderboard(modal, loadDb());
+                });
+            }
+        }
+        renderLeaderboard(modal, db);
+        return modal;
+    }
+
+    function renderLeaderboard(modal, db) {
+        const body = modal.querySelector(`.${SCRIPT_PREFIX}-rank-body`);
+        const summary = modal.querySelector(`.${SCRIPT_PREFIX}-rank-filter-summary`);
+        const filters = readLeaderboardFilters(modal);
+        const rows = ratingLeaderboard(db, filters);
+        if (summary) {
+            const timeText = filters.recentDays > 0 ? `最近 ${filters.recentDays} 天内有统计比赛` : '不限最近比赛时间';
+            summary.textContent = `${timeText}，比赛数量 ≥ ${filters.minContests}，共 ${rows.length} 人`;
+        }
+        if (!rows.length) {
+            body.innerHTML = `<div class="${SCRIPT_PREFIX}-rank-empty">暂无符合条件的 rating 数据</div>`;
+            return;
+        }
+        const table = document.createElement('table');
+        table.className = `${SCRIPT_PREFIX}-rank-table`;
+        table.innerHTML = '<thead><tr><th>排名</th><th>用户名</th><th>rating</th></tr></thead><tbody></tbody>';
+        const tbody = table.tBodies[0];
+        let rank = 0;
+        let prevRating = null;
+        rows.forEach((row, index) => {
+            if (row.rating !== prevRating) {
+                rank = index + 1;
+                prevRating = row.rating;
+            }
+            const tr = document.createElement('tr');
+            const rankTd = document.createElement('td');
+            rankTd.textContent = String(rank);
+            const userTd = document.createElement('td');
+            const link = document.createElement('a');
+            link.href = userUrl(row.userId);
+            link.textContent = row.username;
+            link.title = `打开 ${row.username} 的主页`;
+            userTd.appendChild(link);
+            const ratingTd = document.createElement('td');
+            ratingTd.appendChild(makeBadge(row.rating));
+            tr.append(rankTd, userTd, ratingTd);
+            tbody.appendChild(tr);
+        });
+        body.replaceChildren(table);
+    }
+
+    function showLeaderboard(db) {
+        const modal = ensureLeaderboardModal(db);
+        modal.classList.add('is-open');
+    }
+
     function ratingBands(maxR) {
         const thresholds = [
             { from: 0, to: 400, className: 'gray' },
@@ -915,7 +1018,9 @@
         const allRecordsSig = Object.values(db.records || {}).map(r => `${r.contestId}:${r.userId}:${r.time}:${r.oldRating}:${r.newRating}:${r.performance}:${r.rank}:${r.score}`).sort().join('|');
         if (box.dataset.recordsSig === allRecordsSig && box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)) return;
         box.dataset.recordsSig = allRecordsSig;
-        box.innerHTML = '<div class="section__header"><h1 class="section__title">GOJ Rating</h1></div><div class="section__body"></div>';
+        box.innerHTML = '<div class="section__header"><div class="section__title goj-acr-chart-title-row"><button type="button" class="button goj-acr-rank-btn">显示排行榜</button><h1>GOJ Rating</h1></div></div><div class="section__body"></div>';
+        const rankBtn = box.querySelector(`.${SCRIPT_PREFIX}-rank-btn`);
+        if (rankBtn) rankBtn.addEventListener('click', () => showLeaderboard(loadDb()));
         const body = box.querySelector('.section__body');
         if (!records.length) {
             const p = document.createElement('p');
@@ -1066,7 +1171,7 @@
             const hasExternalAddedNodes = mutations.some(m => Array.from(m.addedNodes || []).some(node => {
                 if (node.nodeType !== Node.ELEMENT_NODE) return false;
                 const el = node;
-                return !el.closest || !el.closest(`#${SCRIPT_PREFIX}-user-chart, #${SCRIPT_PREFIX}-batch-bar`);
+                return !el.closest || !el.closest(`#${SCRIPT_PREFIX}-user-chart, #${SCRIPT_PREFIX}-batch-bar, #${SCRIPT_PREFIX}-rank-modal`);
             }));
             if (hasExternalAddedNodes) scheduleApply();
         });
