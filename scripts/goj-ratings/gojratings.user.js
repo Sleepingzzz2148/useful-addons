@@ -340,9 +340,17 @@
         return { userId, username };
     }
 
+    function hasContestTimeSubmission(cell) {
+        if (!cell) return false;
+        const raw = text(cell);
+        if (!raw) return false;
+        const contestPart = raw.split('/')[0].trim();
+        return contestPart !== '' && contestPart !== '-';
+    }
+
     function hasScoreboardSubmission(row) {
         if (!row) return false;
-        return Array.from(row.querySelectorAll('td.col--problem')).some(cell => cell.querySelector('a[href*="/record/"]'));
+        return Array.from(row.querySelectorAll('td.col--problem')).some(hasContestTimeSubmission);
     }
 
     function parseScoreboardDocument(doc, url) {
