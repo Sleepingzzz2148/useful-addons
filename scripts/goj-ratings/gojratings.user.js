@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GOJ AtCoder Rating
 // @namespace    https://www.goj.wiki/
-// @version      1.1.0
+// @version      1.1.1
 // @description  在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、rating 曲线与批量导入工具
 // @author       Sleeping_zzz2148
 // @match        https://www.goj.wiki/*
@@ -445,13 +445,12 @@
         let num = 0;
         let den = 0;
         for (let idx = 0; idx < recentFirst.length; idx++) {
-            const i = idx + 1;
-            const w = Math.pow(0.9, i);
-            num += g((Number(recentFirst[idx]) || 0) - f(i)) * w;
+            const w = Math.pow(0.9, idx + 1);
+            num += g(Number(recentFirst[idx]) || 0) * w;
             den += w;
         }
         if (!(num > 0) || !(den > 0)) return 0;
-        return Math.max(0, roundInt(gInv(num / den), 0));
+        return Math.max(0, roundInt(gInv(num / den) - f(rperfs.length), 0));
     }
 
     function calculateAPerf(historyRPerfs) {
@@ -461,10 +460,10 @@
         const recentFirst = historyRPerfs.slice().reverse();
         for (let i = 0; i < recentFirst.length; i++) {
             const w = Math.pow(0.9, i + 1);
-            num += g(recentFirst[i]) * w;
+            num += (Number(recentFirst[i]) || 0) * w;
             den += w;
         }
-        const value = den > 0 && num > 0 ? gInv(num / den) : CENTER;
+        const value = den > 0 ? num / den : CENTER;
         return clampFinite(value, CENTER);
     }
 
@@ -492,13 +491,17 @@
         return roundInt(rperf, CENTER);
     }
 
+    function contestRatingTime(contest) {
+        return safeDate(contest && (contest.endTime || contest.startTime));
+    }
+
     function recalculateDb(inputDb) {
         const db = normalizeDb(inputDb || loadDb());
         db.records = {};
         db.userStates = {};
         const userHistories = {};
         const contests = Object.values(db.contests || {}).filter(c => c && c.contestId && Array.isArray(c.participants));
-        contests.sort((a, b) => (Number(a.startTime || a.endTime) || 0) - (Number(b.startTime || b.endTime) || 0) || String(a.contestId).localeCompare(String(b.contestId)));
+        contests.sort((a, b) => contestRatingTime(a) - contestRatingTime(b) || String(a.contestId).localeCompare(String(b.contestId)));
 
         for (const contest of contests) {
             assignAverageRanks(contest.participants);
@@ -513,7 +516,7 @@
                 const record = {
                     contestId: contest.contestId,
                     contestName: contest.contestName || contest.contestId,
-                    time: safeDate(contest.startTime || contest.endTime),
+                    time: contestRatingTime(contest),
                     userId: String(p.userId),
                     username: p.username || String(p.userId),
                     rank: clampFinite(Number(p.rank), p.actualRank || idx + 1),
