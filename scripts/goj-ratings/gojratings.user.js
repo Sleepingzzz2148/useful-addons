@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GOJ AtCoder Rating
 // @namespace    https://www.goj.wiki/
-// @version      1.1.1
+// @version      1.1.2
 // @description  在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、rating 曲线与批量导入工具
 // @author       Sleeping_zzz2148
 // @match        https://www.goj.wiki/*
@@ -340,6 +340,11 @@
         return { userId, username };
     }
 
+    function hasScoreboardSubmission(row) {
+        if (!row) return false;
+        return Array.from(row.querySelectorAll('td.col--problem')).some(cell => cell.querySelector('a[href*="/record/"]'));
+    }
+
     function parseScoreboardDocument(doc, url) {
         const contestId = contestIdFromUrl(url) || contestIdFromLocation();
         if (!contestId) throw new Error('Cannot parse contestId from URL.');
@@ -354,11 +359,12 @@
                 warn('Skip scoreboard row without userId.', row);
                 continue;
             }
+            if (!hasScoreboardSubmission(row)) continue;
             const rankCell = row.querySelector('td.col--rank') || row.cells[0];
             const scoreCell = row.querySelector('td.col--total_score');
-            const rank = parseRank(text(rankCell), i + 1);
+            const rank = parseRank(text(rankCell), participants.length + 1);
             const score = parseNumber(text(scoreCell), 0);
-            participants.push({ ...info, rank, actualRank: i + 1, score });
+            participants.push({ ...info, rank, actualRank: participants.length + 1, score, hasSubmission: true });
         }
         assignAverageRanks(participants);
         const times = getContestTimes(doc);
@@ -504,10 +510,11 @@
         contests.sort((a, b) => contestRatingTime(a) - contestRatingTime(b) || String(a.contestId).localeCompare(String(b.contestId)));
 
         for (const contest of contests) {
-            assignAverageRanks(contest.participants);
-            const participantAPerfs = contest.participants.map(p => calculateAPerf((userHistories[p.userId] || []).map(r => r.performance)));
-            for (let idx = 0; idx < contest.participants.length; idx++) {
-                const p = contest.participants[idx];
+            const ratedParticipants = contest.participants.filter(p => p && p.hasSubmission !== false);
+            assignAverageRanks(ratedParticipants);
+            const participantAPerfs = ratedParticipants.map(p => calculateAPerf((userHistories[p.userId] || []).map(r => r.performance)));
+            for (let idx = 0; idx < ratedParticipants.length; idx++) {
+                const p = ratedParticipants[idx];
                 const history = userHistories[p.userId] || [];
                 const oldRating = history.length ? history[history.length - 1].newRating : 0;
                 const performance = calculatePerformance(p.rank, participantAPerfs, history.length === 0);
