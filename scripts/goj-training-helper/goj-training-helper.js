@@ -8,8 +8,10 @@
 // @author       mine2307
 // @license      All Rights Reserved
 // @copyright    2026 mine2307
-// @homepageURL  https://github.com/Sleepingzzz2148/useful-addons/tree/main/scripts/goj-training-helper
+// @homepageURL  https://github.com/Sleepingzzz2148/useful-addons
 // @supportURL   https://github.com/Sleepingzzz2148/useful-addons/issues
+// @downloadURL  https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-training-helper.user.js
+// @updateURL    https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-training-helper.user.js
 // @match        http://www.goj.wiki/d/*/training/*
 // @match        https://www.goj.wiki/d/*/training/*
 // @grant        none
