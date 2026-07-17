@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GOJ AtCoder Rating
 // @namespace    https://www.goj.wiki/
-// @version      1.1.2
+// @version      1.1.3
 // @description  在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、rating 曲线与批量导入工具
 // @author       Sleeping_zzz2148
 // @match        https://www.goj.wiki/*
@@ -80,7 +80,7 @@
     function text(el) { return (el && el.textContent ? el.textContent : '').trim(); }
 
     function defaultDb() {
-        return { version: DB_VERSION, contests: {}, records: {}, userStates: {} };
+        return { version: DB_VERSION, contests: {}, records: {}, userStates: {}, problemDifficulties: {} };
     }
 
     function normalizeDb(raw) {
@@ -89,6 +89,7 @@
         if (!db.contests || typeof db.contests !== 'object') db.contests = {};
         if (!db.records || typeof db.records !== 'object') db.records = {};
         if (!db.userStates || typeof db.userStates !== 'object') db.userStates = {};
+        if (!db.problemDifficulties || typeof db.problemDifficulties !== 'object') db.problemDifficulties = {};
         return db;
     }
 
@@ -139,6 +140,13 @@
         return Number.isFinite(n) ? n : fallback;
     }
 
+    function parseProblemScoreCell(cell) {
+        if (!cell) return NaN;
+        const contestPart = text(cell).split('/')[0].trim();
+        if (!contestPart || contestPart === '-') return 0;
+        return parseNumber(contestPart, NaN);
+    }
+
     function cssRatingClass(rating) {
         const r = Number(rating) || 0;
         if (r >= 2800) return 'red';
@@ -156,7 +164,7 @@
         const style = document.createElement('style');
         style.id = `${SCRIPT_PREFIX}-style`;
         style.textContent = `
-            .${SCRIPT_PREFIX}-badge{display:inline-block;margin-left:.35em;padding:.05em .35em;border-radius:.35em;font-size:12px;line-height:1.35;font-weight:700;color:#fff;vertical-align:middle}.${SCRIPT_PREFIX}-badge.gray{background:#808080}.${SCRIPT_PREFIX}-badge.brown{background:#8c6239}.${SCRIPT_PREFIX}-badge.green{background:#3b8b3b}.${SCRIPT_PREFIX}-badge.cyan{background:#00a3a3}.${SCRIPT_PREFIX}-badge.blue{background:#3157d5}.${SCRIPT_PREFIX}-badge.yellow{background:#b59b00}.${SCRIPT_PREFIX}-badge.orange{background:#f08200}.${SCRIPT_PREFIX}-badge.red{background:#d32f2f}
+            .${SCRIPT_PREFIX}-badge{display:inline-block;margin-left:.35em;padding:.05em .35em;border-radius:.35em;font-size:12px;line-height:1.35;font-weight:700;color:#fff;vertical-align:middle}.${SCRIPT_PREFIX}-badge.gray{background:#808080}.${SCRIPT_PREFIX}-badge.brown{background:#8c6239}.${SCRIPT_PREFIX}-badge.green{background:#3b8b3b}.${SCRIPT_PREFIX}-badge.cyan{background:#00a3a3}.${SCRIPT_PREFIX}-badge.blue{background:#3157d5}.${SCRIPT_PREFIX}-badge.yellow{background:#b59b00}.${SCRIPT_PREFIX}-badge.orange{background:#f08200}.${SCRIPT_PREFIX}-badge.red{background:#d32f2f}.${SCRIPT_PREFIX}-problem-diff{display:inline-block;margin:0 .25em .15em 0;padding:.05em .32em;border-radius:.35em;font-size:11px;line-height:1.25;font-weight:700;color:#fff;vertical-align:middle}.${SCRIPT_PREFIX}-problem-diff.gray{background:#808080}.${SCRIPT_PREFIX}-problem-diff.brown{background:#8c6239}.${SCRIPT_PREFIX}-problem-diff.green{background:#3b8b3b}.${SCRIPT_PREFIX}-problem-diff.cyan{background:#00a3a3}.${SCRIPT_PREFIX}-problem-diff.blue{background:#3157d5}.${SCRIPT_PREFIX}-problem-diff.yellow{background:#b59b00}.${SCRIPT_PREFIX}-problem-diff.orange{background:#f08200}.${SCRIPT_PREFIX}-problem-diff.red{background:#d32f2f}
                         .section__table-container{overflow-x:auto}table.data-table,table.section__table-header{table-layout:auto;width:max-content;min-width:100%}table.data-table td.col--user,table.section__table-header th.col--user{min-width:18em;max-width:none;white-space:nowrap}.col--${SCRIPT_PREFIX}-delta{white-space:nowrap;text-align:right;min-width:9.5em}.col--${SCRIPT_PREFIX}-perf{white-space:nowrap;text-align:right;min-width:6em}.${SCRIPT_PREFIX}-chart{margin:0 0 1em 0}.${SCRIPT_PREFIX}-chart .section__body{padding:1em}.${SCRIPT_PREFIX}-chart-toolbar{display:flex;align-items:center;gap:.6em;margin:.35em 0 1.4em 0;flex-wrap:wrap;color:#9aa4b2;font-size:13px}.${SCRIPT_PREFIX}-chart-toolbar input[type="range"]{width:220px;max-width:100%}.${SCRIPT_PREFIX}-chart-viewport{position:relative;overflow-x:auto;overflow-y:visible;padding-bottom:.25em}.${SCRIPT_PREFIX}-chart svg{display:block;max-width:none;height:auto;background:#252b32;border-radius:2px}.${SCRIPT_PREFIX}-chart-empty{color:#888}.${SCRIPT_PREFIX}-axis{stroke:rgba(255,255,255,.62);stroke-width:1}.${SCRIPT_PREFIX}-line{fill:none;stroke:#d6d6d6;stroke-width:2}.${SCRIPT_PREFIX}-dot{stroke:#fff;stroke-width:1;cursor:pointer}.${SCRIPT_PREFIX}-hit{fill:transparent;stroke:transparent;cursor:pointer}.${SCRIPT_PREFIX}-grid{stroke:rgba(255,255,255,.42);stroke-width:1}.${SCRIPT_PREFIX}-band{stroke:none;opacity:.52}.${SCRIPT_PREFIX}-band.gray{fill:#7f7f7f}.${SCRIPT_PREFIX}-band.brown{fill:#8c6239}.${SCRIPT_PREFIX}-band.green{fill:#1f7a3d}.${SCRIPT_PREFIX}-band.cyan{fill:#1e8a8a}.${SCRIPT_PREFIX}-band.blue{fill:#242a8f}.${SCRIPT_PREFIX}-band.yellow{fill:#808a1e}.${SCRIPT_PREFIX}-band.orange{fill:#c8751a}.${SCRIPT_PREFIX}-band.red{fill:#b03a3a}.${SCRIPT_PREFIX}-chart-label{font-size:12px;fill:#c8d1dc}.${SCRIPT_PREFIX}-tooltip{position:absolute;z-index:10;display:none;min-width:180px;max-width:280px;padding:.55em .7em;border-radius:4px;background:rgba(17,24,39,.95);box-shadow:0 6px 18px rgba(0,0,0,.32);color:#f4f7fb;font-size:12px;line-height:1.45;pointer-events:none;white-space:normal}.${SCRIPT_PREFIX}-tooltip strong{display:block;margin-bottom:.25em;color:#fff}.${SCRIPT_PREFIX}-tooltip .${SCRIPT_PREFIX}-delta-pos{color:#59c36a}.${SCRIPT_PREFIX}-tooltip .${SCRIPT_PREFIX}-delta-neg{color:#ff6b7a}
                         .${SCRIPT_PREFIX}-delta-pos{color:#22863a;font-weight:700}.${SCRIPT_PREFIX}-delta-neg{color:#cb2431;font-weight:700}.${SCRIPT_PREFIX}-delta-zero{color:#666}.${SCRIPT_PREFIX}-unrated{color:#888;font-style:italic}
                         .${SCRIPT_PREFIX}-batch-bar{margin:0 0 .75em 0;padding:.75em 1em;border:1px solid rgba(255,255,255,.12);border-radius:4px;background:rgba(255,255,255,.04);display:flex;gap:.75em;align-items:center;flex-wrap:wrap}.${SCRIPT_PREFIX}-batch-status{color:#9aa4b2;font-size:13px}.${SCRIPT_PREFIX}-batch-status.error{color:#cb2431}.${SCRIPT_PREFIX}-batch-status.success{color:#22863a}.${SCRIPT_PREFIX}-batch-bar .button[disabled]{opacity:.62;cursor:not-allowed}
@@ -353,12 +361,100 @@
         return Array.from(row.querySelectorAll('td.col--problem')).some(hasContestTimeSubmission);
     }
 
+    function problemKey(contestId, problemIndex) {
+        return `${contestId}:${problemIndex}`;
+    }
+
+    function problemIdFromHref(href) {
+        const m = String(href || '').match(/\/p\/([^/?#]+)/);
+        return m ? decodeURIComponent(m[1]) : '';
+    }
+
+    function positiveFiniteNumber(value) {
+        const n = Number(value);
+        return Number.isFinite(n) && n > 0 ? n : NaN;
+    }
+
+    function parseProblemMaxScoreFromText(raw) {
+        const s = String(raw || '').replace(/,/g, ' ');
+        const patterns = [
+            /(?:满分|配点|分值|score|max\s*score)\s*[:：]?\s*(\d+(?:\.\d+)?)/i,
+            /(\d+(?:\.\d+)?)\s*(?:分|pts?|points?)\b/i,
+        ];
+        for (const pattern of patterns) {
+            const m = s.match(pattern);
+            const n = m && positiveFiniteNumber(m[1]);
+            if (Number.isFinite(n)) return n;
+        }
+        return NaN;
+    }
+
+    function parseProblemMaxScoreFromElement(el) {
+        if (!el) return NaN;
+        for (const attr of ['data-max-score', 'data-score', 'data-full-score', 'data-total-score']) {
+            const n = positiveFiniteNumber(el.getAttribute && el.getAttribute(attr));
+            if (Number.isFinite(n)) return n;
+        }
+        const attrText = [
+            el.getAttribute && el.getAttribute('data-tooltip'),
+            el.getAttribute && el.getAttribute('title'),
+            text(el),
+        ].filter(Boolean).join(' ');
+        return parseProblemMaxScoreFromText(attrText);
+    }
+
+    function resolveProblemMaxScore(contest, problem, problemIndex) {
+        const candidates = [
+            problem && problem.maxScore,
+            problem && problem.fullScore,
+            problem && problem.score,
+            problem && problem.totalScore,
+            contest && contest.problemMaxScores && contest.problemMaxScores[problemIndex],
+        ];
+        for (const candidate of candidates) {
+            const n = positiveFiniteNumber(candidate);
+            if (Number.isFinite(n)) return n;
+        }
+        warn(`Cannot parse maxScore for ${contest && contest.contestId ? contest.contestId : 'unknown contest'} ${problem && problem.label ? problem.label : String.fromCharCode(65 + problemIndex)}; fallback to 100.`);
+        return 100;
+    }
+
+    function extractScoreboardProblems(doc, contestId) {
+        const { header, body } = scoreboardTables(doc);
+        const headerCells = header && header.tHead && header.tHead.rows[0]
+            ? Array.from(header.tHead.rows[0].querySelectorAll('th.col--problem'))
+            : [];
+        const bodyProblemCount = body && body.tBodies[0] && body.tBodies[0].rows[0]
+            ? body.tBodies[0].rows[0].querySelectorAll('td.col--problem').length
+            : 0;
+        const count = Math.max(headerCells.length, bodyProblemCount);
+        const problems = [];
+        for (let i = 0; i < count; i++) {
+            const th = headerCells[i];
+            const link = th && th.querySelector('a[href]');
+            const label = link ? text(link).split(/\s+/)[0] : String.fromCharCode(65 + i);
+            const href = link ? link.getAttribute('href') || '' : '';
+            const maxScore = parseProblemMaxScoreFromElement(th) || parseProblemMaxScoreFromElement(link);
+            problems.push({
+                key: problemKey(contestId, i),
+                index: i,
+                problemId: problemIdFromHref(href) || String(i),
+                label: label || String.fromCharCode(65 + i),
+                title: (link && (link.getAttribute('data-tooltip') || link.getAttribute('title') || text(link))) || '',
+                href,
+                maxScore: Number.isFinite(maxScore) ? maxScore : undefined,
+            });
+        }
+        return problems;
+    }
+
     function parseScoreboardDocument(doc, url) {
         const contestId = contestIdFromUrl(url) || contestIdFromLocation();
         if (!contestId) throw new Error('Cannot parse contestId from URL.');
         const { body } = scoreboardTables(doc);
         if (!body || !body.tBodies[0]) throw new Error('Cannot find scoreboard body table.');
         const rows = Array.from(body.tBodies[0].rows || []);
+        const problems = extractScoreboardProblems(doc, contestId);
         const participants = [];
         for (let i = 0; i < rows.length; i++) {
             const row = rows[i];
@@ -372,7 +468,8 @@
             const scoreCell = row.querySelector('td.col--total_score');
             const rank = parseRank(text(rankCell), participants.length + 1);
             const score = parseNumber(text(scoreCell), 0);
-            participants.push({ ...info, rank, actualRank: participants.length + 1, score, hasSubmission: true });
+            const problemScores = Array.from(row.querySelectorAll('td.col--problem')).map(parseProblemScoreCell);
+            participants.push({ ...info, rank, actualRank: participants.length + 1, score, problemScores, hasSubmission: true });
         }
         assignAverageRanks(participants);
         const times = getContestTimes(doc);
@@ -381,6 +478,7 @@
             contestName: getContestName(doc, contestId),
             startTime: times.startTime,
             endTime: times.endTime,
+            problems,
             participants,
             ratedAt: Date.now(),
         };
@@ -509,10 +607,83 @@
         return safeDate(contest && (contest.endTime || contest.startTime));
     }
 
+    function expectedScoreRatio(strength, difficulty) {
+        const s = Number(strength);
+        const d = Number(difficulty);
+
+        if (!Number.isFinite(s) || !Number.isFinite(d)) {
+            return NaN;
+        }
+
+        return 1 / (1 + 0.25 * Math.pow(6, (d - s) / 400));
+    }
+
+    function solveProbability(strength, difficulty) {
+        return expectedScoreRatio(strength, difficulty);
+    }
+
+    function expectedProblemScore(strength, difficulty, maxScore) {
+        const ratio = expectedScoreRatio(strength, difficulty);
+        const fullScore = Number(maxScore);
+
+        if (!Number.isFinite(ratio) || !(fullScore > 0)) {
+            return NaN;
+        }
+
+        return fullScore * ratio;
+    }
+
+    function calculateProblemDifficulty(samples, maxScore) {
+        const defaultMaxScore = positiveFiniteNumber(maxScore);
+        const usable = (samples || []).map(s => {
+            const strength = Number(s && s.strength);
+            const score = Number(s && s.score);
+            const fullScore = positiveFiniteNumber(s && s.maxScore) || defaultMaxScore;
+            return { strength, score, maxScore: fullScore };
+        }).filter(s => Number.isFinite(s.strength) && Number.isFinite(s.score) && Number.isFinite(s.maxScore));
+        if (!usable.length) return null;
+
+        const sampleCount = usable.length;
+        const actualTotalScore = usable.reduce((sum, s) => sum + Math.max(0, Math.min(s.score, s.maxScore)), 0);
+        const maxTotalScore = usable.reduce((sum, s) => sum + s.maxScore, 0);
+        if (!(maxTotalScore > 0)) return null;
+
+        let targetTotalScore = actualTotalScore;
+        if (targetTotalScore <= 0) targetTotalScore = Math.min(maxTotalScore, maxTotalScore / Math.max(1000, sampleCount * 1000));
+        else if (targetTotalScore >= maxTotalScore) targetTotalScore = Math.max(0, maxTotalScore - maxTotalScore / Math.max(1000, sampleCount * 1000));
+
+        let lo = PERF_LOW;
+        let hi = PERF_HIGH;
+        for (let it = 0; it < 80; it++) {
+            const mid = (lo + hi) / 2;
+            const expectedTotal = usable.reduce((sum, s) => sum + expectedProblemScore(s.strength, mid, s.maxScore), 0);
+            if (expectedTotal > targetTotalScore) lo = mid;
+            else hi = mid;
+        }
+        const difficulty = roundInt((lo + hi) / 2, CENTER);
+        const expectedTotalScore = usable.reduce((sum, s) => sum + expectedProblemScore(s.strength, difficulty, s.maxScore), 0);
+        const rmse = Math.sqrt(usable.reduce((sum, s) => {
+            const diff = expectedProblemScore(s.strength, difficulty, s.maxScore) - s.score;
+            return sum + diff * diff;
+        }, 0) / sampleCount);
+        const resolvedMaxScore = Number.isFinite(defaultMaxScore) ? defaultMaxScore : usable[0].maxScore;
+        return {
+            difficulty,
+            maxScore: resolvedMaxScore,
+            samples: sampleCount,
+            actualAverageScore: actualTotalScore / sampleCount,
+            expectedAverageScore: expectedTotalScore / sampleCount,
+            actualTotalScore,
+            expectedTotalScore,
+            rmse,
+        };
+    }
+
     function recalculateDb(inputDb) {
         const db = normalizeDb(inputDb || loadDb());
         db.records = {};
         db.userStates = {};
+        db.problemDifficulties = {};
         const userHistories = {};
         const contests = Object.values(db.contests || {}).filter(c => c && c.contestId && Array.isArray(c.participants));
         contests.sort((a, b) => contestRatingTime(a) - contestRatingTime(b) || String(a.contestId).localeCompare(String(b.contestId)));
@@ -521,6 +692,48 @@
             const ratedParticipants = contest.participants.filter(p => p && p.hasSubmission !== false);
             assignAverageRanks(ratedParticipants);
             const participantAPerfs = ratedParticipants.map(p => calculateAPerf((userHistories[p.userId] || []).map(r => r.performance)));
+            const problems = Array.isArray(contest.problems) ? contest.problems : [];
+            const problemSamples = problems.map(() => []);
+            const problemMaxScores = problems.map((problem, problemIndex) => resolveProblemMaxScore(contest, problem || {}, problemIndex));
+            for (let idx = 0; idx < ratedParticipants.length; idx++) {
+                const p = ratedParticipants[idx];
+                if (Array.isArray(p.problemScores)) {
+                    for (let problemIndex = 0; problemIndex < Math.min(problemSamples.length, p.problemScores.length); problemIndex++) {
+                        const problemScore = Number(p.problemScores[problemIndex]);
+                        const problemMaxScore = problemMaxScores[problemIndex];
+                        if (Number.isFinite(problemScore)) problemSamples[problemIndex].push({
+                            strength: participantAPerfs[idx],
+                            score: problemScore,
+                            maxScore: problemMaxScore,
+                        });
+                    }
+                }
+            }
+            for (let problemIndex = 0; problemIndex < problems.length; problemIndex++) {
+                const problem = problems[problemIndex] || {};
+                const samples = problemSamples[problemIndex] || [];
+                const maxScore = problemMaxScores[problemIndex];
+                const result = calculateProblemDifficulty(samples, maxScore);
+                if (!result) continue;
+                db.problemDifficulties[problem.key || problemKey(contest.contestId, problemIndex)] = {
+                    contestId: contest.contestId,
+                    contestName: contest.contestName || contest.contestId,
+                    problemId: problem.problemId || problemIdFromHref(problem.href) || String(problemIndex),
+                    problemIndex,
+                    label: problem.label || String.fromCharCode(65 + problemIndex),
+                    title: problem.title || '',
+                    href: problem.href || '',
+                    difficulty: result.difficulty,
+                    maxScore: result.maxScore,
+                    samples: result.samples,
+                    actualAverageScore: result.actualAverageScore,
+                    expectedAverageScore: result.expectedAverageScore,
+                    actualTotalScore: result.actualTotalScore,
+                    expectedTotalScore: result.expectedTotalScore,
+                    rmse: result.rmse,
+                    updatedAt: Date.now(),
+                };
+            }
             for (let idx = 0; idx < ratedParticipants.length; idx++) {
                 const p = ratedParticipants[idx];
                 const history = userHistories[p.userId] || [];
@@ -537,6 +750,7 @@
                     rank: clampFinite(Number(p.rank), p.actualRank || idx + 1),
                     actualRank: p.actualRank || idx + 1,
                     score: clampFinite(Number(p.score), 0),
+                    problemScores: Array.isArray(p.problemScores) ? p.problemScores.slice() : [],
                     oldRating,
                     performance,
                     newRating,
@@ -607,6 +821,18 @@
         return span;
     }
 
+    function makeProblemDiffBadge(diff) {
+        const span = document.createElement('span');
+        span.className = `${SCRIPT_PREFIX}-problem-diff ${cssRatingClass(diff.difficulty)}`;
+        span.dataset.gojAcrProblemDiff = '1';
+        span.textContent = String(roundInt(diff.difficulty, 0));
+        const actualAverageScore = Number.isFinite(Number(diff.actualAverageScore)) ? Number(diff.actualAverageScore) : Number(diff.averageScore);
+        const expectedAverageScore = Number.isFinite(Number(diff.expectedAverageScore)) ? Number(diff.expectedAverageScore) : NaN;
+        const maxScore = positiveFiniteNumber(diff.maxScore) || 100;
+        span.title = `题目难度 diff=${span.textContent}：APerf 等于该难度的选手，预期获得满分的 80%。满分 ${roundInt(maxScore, 0)}，样本 ${Number(diff.samples) || 0} 人，实际平均分 ${roundInt(actualAverageScore, 0)}，预测平均分 ${Number.isFinite(expectedAverageScore) ? roundInt(expectedAverageScore, 0) : 'N/A'}，RMSE ${roundInt(diff.rmse, 0)}`;
+        return span;
+    }
+
     function injectScoreboardButtons(db) {
         const ghost = findGhostButton();
         if (!ghost || document.querySelector(`.${SCRIPT_PREFIX}-btn`)) return;
@@ -636,9 +862,25 @@
     }
 
 
+    function injectProblemDifficultyBadges(db) {
+        const contestId = contestIdFromLocation();
+        const { header } = scoreboardTables();
+        if (!contestId || !header || !header.tHead || !header.tHead.rows[0]) return;
+        const problemHeaders = Array.from(header.tHead.rows[0].querySelectorAll('th.col--problem'));
+        for (let problemIndex = 0; problemIndex < problemHeaders.length; problemIndex++) {
+            const th = problemHeaders[problemIndex];
+            Array.from(th.querySelectorAll(`[data-goj-acr-problem-diff="1"]`)).forEach(el => el.remove());
+            const diff = db.problemDifficulties && db.problemDifficulties[problemKey(contestId, problemIndex)];
+            if (!diff) continue;
+            const link = th.querySelector('a[href]') || th;
+            link.insertAdjacentElement('afterbegin', makeProblemDiffBadge(diff));
+        }
+    }
+
     function injectScoreboardColumns(db) {
         const { header, body } = scoreboardTables();
         if (!body || !body.tBodies[0]) return;
+        injectProblemDifficultyBadges(db);
         if (header && header.tHead && header.tHead.rows[0]) {
             insertColAtEnd(header.tHead.rows[0], `col--${SCRIPT_PREFIX}-delta`, 'rating Δ');
             insertColAtEnd(header.tHead.rows[0], `col--${SCRIPT_PREFIX}-perf`, 'performance');
@@ -1197,6 +1439,22 @@
         setInterval(scheduleApply, 2500);
     }
 
+    function getProblemDifficulty(contestId, problemId) {
+        const db = loadDb();
+        const diffs = db.problemDifficulties || {};
+        if (diffs[problemKey(contestId, problemId)]) return diffs[problemKey(contestId, problemId)];
+        return Object.values(diffs).find(diff => diff && String(diff.contestId) === String(contestId)
+            && (String(diff.problemId) === String(problemId) || String(diff.problemIndex) === String(problemId) || String(diff.label) === String(problemId))) || null;
+    }
+
+    function recalculateProblemDifficulties() {
+        const db = loadDb();
+        const next = recalculateDb(db);
+        saveDb(next);
+        scheduleApply();
+        return next.problemDifficulties || {};
+    }
+
     window.GOJAtCoderRating = {
         constants: { CENTER, RATED_BOUND, PERF_LOW, PERF_HIGH, STORAGE_KEY },
         exportData() { return JSON.parse(JSON.stringify(loadDb())); },
@@ -1216,6 +1474,12 @@
         reset: resetDb,
         parseCurrentScoreboard,
         fetchContestRatedFromUrl,
+        expectedScoreRatio,
+        solveProbability,
+        expectedProblemScore,
+        calculateProblemDifficulty,
+        getProblemDifficulty,
+        recalculateProblemDifficulties,
     };
 
     setupObserver();
