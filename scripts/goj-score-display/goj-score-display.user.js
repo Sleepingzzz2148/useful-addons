@@ -261,6 +261,8 @@
             }
 
             .goj-problem-item-v2 {
+                position: relative;
+                isolation: isolate;
                 opacity: 0;
                 transform: translateY(24px);
                 display: grid;
@@ -274,6 +276,23 @@
                 animation: gojProblemIn .58s ease forwards;
             }
 
+            .goj-problem-item-v2.goj-problem-perfect-v2::after {
+                content: '';
+                position: absolute;
+                z-index: -1;
+                inset: -2px;
+                pointer-events: none;
+                border: 2px solid rgba(74, 222, 128, .88);
+                border-radius: 24px;
+                opacity: 0;
+                transform: scale(1);
+                box-shadow:
+                    0 0 0 1px rgba(34, 197, 94, .58),
+                    0 0 12px 3px rgba(74, 222, 128, .48),
+                    0 0 24px 7px rgba(74, 222, 128, .22);
+                animation: gojPerfectShockwave 1.35s cubic-bezier(.22, .61, .36, 1) forwards;
+                animation-delay: var(--shockwave-delay);
+            }
             .goj-problem-letter-v2 {
                 width: 52px;
                 height: 52px;
@@ -463,6 +482,32 @@
                 to { width: var(--target-width); }
             }
 
+            @keyframes gojPerfectShockwave {
+                0% {
+                    opacity: .92;
+                    transform: scale(1);
+                    box-shadow:
+                        0 0 0 1px rgba(34, 197, 94, .72),
+                        0 0 12px 3px rgba(74, 222, 128, .56),
+                        0 0 24px 7px rgba(74, 222, 128, .28);
+                }
+                42% {
+                    opacity: .68;
+                    transform: scale(1.012);
+                    box-shadow:
+                        0 0 0 3px rgba(34, 197, 94, .52),
+                        0 0 20px 8px rgba(74, 222, 128, .38),
+                        0 0 42px 16px rgba(74, 222, 128, .18);
+                }
+                100% {
+                    opacity: 0;
+                    transform: scale(1.035);
+                    box-shadow:
+                        0 0 0 8px rgba(34, 197, 94, 0),
+                        0 0 40px 20px rgba(74, 222, 128, 0),
+                        0 0 72px 32px rgba(74, 222, 128, 0);
+                }
+            }
             @keyframes gojTextShine {
                 from { background-position: 0% center; }
                 to { background-position: 320% center; }
@@ -975,11 +1020,15 @@
 
             const delay = firstProblemDelay + index * problemInterval;
             const scoreClass = getScoreClass(p.score, p.maxScore);
+            const isPerfect = p.score >= p.maxScore;
 
             const item = document.createElement('div');
-            item.className = 'goj-problem-item-v2';
+            item.className = `goj-problem-item-v2${isPerfect ? ' goj-problem-perfect-v2' : ''}`;
             item.style.animationDelay = `${delay}s`;
-
+            if (isPerfect) {
+                // 分数条从 delay + 0.18s 开始，持续 0.95s；光芒紧接着播放。
+                item.style.setProperty('--shockwave-delay', `${delay + 1.13}s`);
+            }
             item.innerHTML = `
                 <div class="goj-problem-letter-v2">${escapeHtml(p.label)}</div>
 
