@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         GOJ AtCoder Rating
 // @namespace    https://www.goj.wiki/
-// @version      1.1.3
+// @version      1.1.4
 // @description  在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、rating 曲线与批量导入工具
 // @author       Sleeping_zzz2148
 // @match        https://www.goj.wiki/*
@@ -11,8 +11,8 @@
 // @license      All Rights Reserved
 // @homepageURL  https://github.com/Sleepingzzz2148/useful-addons
 // @supportURL   https://github.com/Sleepingzzz2148/useful-addons/issues
-// @downloadURL  https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/gojratings.user.js
-// @updateURL    https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/gojratings.user.js
+// @downloadURL  https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-ratings.user.js
+// @updateURL    https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-ratings.user.js
 // @grant        none
 // @run-at       document-idle
 // ==/UserScript==
@@ -1392,7 +1392,11 @@
         }
         const records = userRecords(db, userId);
         const allRecordsSig = Object.values(db.records || {}).map(r => `${r.contestId}:${r.userId}:${r.time}:${r.oldRating}:${r.newRating}:${r.performance}:${r.rank}:${r.score}`).sort().join('|');
-        if (box.dataset.recordsSig === allRecordsSig && box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)) return;
+        const hasCurrentChartUi = box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)
+            && box.querySelector(`.${SCRIPT_PREFIX}-contest-export-btn`)
+            && box.querySelector(`.${SCRIPT_PREFIX}-contest-import-btn`)
+            && box.querySelector(`.${SCRIPT_PREFIX}-contest-import-input`);
+        if (box.dataset.recordsSig === allRecordsSig && hasCurrentChartUi) return;
         box.dataset.recordsSig = allRecordsSig;
         box.innerHTML = `<div class="section__header"><div class="section__title ${SCRIPT_PREFIX}-chart-title-row"><button type="button" class="button ${SCRIPT_PREFIX}-rank-btn">显示排行榜</button><button type="button" class="button ${SCRIPT_PREFIX}-contest-export-btn">导出比赛数据包</button><button type="button" class="button ${SCRIPT_PREFIX}-contest-import-btn">追加比赛包</button><input type="file" accept="application/json,.json" class="${SCRIPT_PREFIX}-contest-import-input" hidden><h1>GOJ Rating</h1></div></div><div class="section__body"></div>`;
         const rankBtn = box.querySelector(`.${SCRIPT_PREFIX}-rank-btn`);
@@ -1433,9 +1437,13 @@
                 }
                 try {
                     const stats = appendContestPackage(content);
-                    const conflictText = stats.conflicts ? `，其中 ${stats.conflicts} 场内容不同，已保留本地数据` : '';
-                    alert(stats.added ? `已追加 ${stats.added} 场比赛，跳过 ${stats.skipped} 场${conflictText}。rating 已重算。` : `未追加新比赛，跳过 ${stats.skipped} 场${conflictText}。`);
-                    if (stats.added) injectUserChart(loadDb());
+                    const conflictText = stats.conflicts ? `；${stats.conflicts} 场同 ID 比赛内容不同，已保留本地数据` : '';
+                    if (stats.added) {
+                        alert(`比赛包共 ${stats.total} 场：新增 ${stats.added} 场，重复 ${stats.skipped} 场${conflictText}。已使用全部本地比赛重算 rating。`);
+                        injectUserChart(loadDb());
+                    } else {
+                        alert(`比赛包共 ${stats.total} 场，全部已存在于本地数据库，没有新增背景比赛${conflictText}。用户曲线中的 rated 比赛数只统计该用户参赛场次，不是数据库比赛总数。`);
+                    }
                 } catch (e) {
                     error('Failed to append contest package.', e);
                     alert(`追加比赛包失败：${e.message || e}`);
@@ -1452,7 +1460,8 @@
         }
         const latest = records[records.length - 1];
         const summary = document.createElement('p');
-        summary.innerHTML = `当前 rating：<strong>${latest.newRating}</strong>，rated 比赛：<strong>${records.length}</strong>`;
+        const databaseContestCount = Object.keys(db.contests || {}).length;
+        summary.innerHTML = `当前 rating：<strong>${latest.newRating}</strong>，该用户参赛：<strong>${records.length}</strong>，本地数据库比赛：<strong>${databaseContestCount}</strong>`;
         body.appendChild(summary);
         const toolbar = document.createElement('div');
         toolbar.className = `${SCRIPT_PREFIX}-chart-toolbar`;

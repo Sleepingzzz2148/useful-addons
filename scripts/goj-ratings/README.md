@@ -2,7 +2,7 @@
 
 在 GOJ 比赛榜单和用户页显示本地 AtCoder 风格 rating、performance、题目难度、rating 曲线、排行榜与 head-to-head 对比。
 
-> 脚本文件：[`gojratings.user.js`](./gojratings.user.js)
+> 脚本文件：[`goj-ratings.user.js`](./goj-ratings.user.js)
 
 ---
 
@@ -36,7 +36,7 @@
 
 然后点击安装：
 
-[安装 gojratings.user.js](https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/gojratings.user.js)
+[安装 goj-ratings.user.js](https://github.com/Sleepingzzz2148/useful-addons/releases/latest/download/goj-ratings.user.js)
 
 ---
 
@@ -65,13 +65,15 @@
 ### 导出或追加比赛数据包
 
 1. 打开任意 GOJ 用户页，在 `GOJ Rating` 区域点击“导出比赛数据包”；
-2. 浏览器会下载仅包含比赛原始数据的 JSON 文件；
+2. 浏览器会下载本地数据库中的全部比赛原始数据，不限于当前主页用户参加的比赛；
 3. 在另一浏览器或环境的任意 GOJ 用户页点击“追加比赛包”，选择该 JSON 文件；
 4. 追加只写入本地尚不存在的比赛，已有 `contestId` 一律跳过，不会覆盖本地比赛；
 5. 重复的比赛会自动去重；若同一 `contestId` 的内容与本地不同，脚本会提示冲突并保留本地数据；
-6. 仅在成功追加新比赛且本地数据库保存成功后，脚本才会重算并提示成功。
+6. 仅在成功追加新比赛且本地数据库保存成功后，脚本才会使用全部本地比赛重算并提示成功。
 
-比赛数据包不包含 `records`、`userStates`、`problemDifficulties` 等派生数据，导入后会根据全部本地比赛重新计算。包必须是当前支持的格式和版本，且每项比赛至少包含 `participants` 数组；结构不完整、JSON 无效、读取失败或保存失败都会明确提示错误，不会报告为成功追加。
+用户没有参加的比赛不会直接成为该用户的 rating 记录，但会更新其他参赛者当时的历史表现。这些参赛者之后与该用户同场时，其历史表现会参与 performance 计算，因此背景比赛可能间接改变该用户后续场次的 rating。个人曲线中的“该用户参赛”只统计该用户实际参赛场次；“本地数据库比赛”才是参与全局重算的比赛总数。
+
+比赛数据包不包含 `records`、`userStates`、`problemDifficulties` 等派生数据，导入后会根据全部本地比赛重新计算。包必须是当前支持的格式和版本，且每项比赛至少包含 `participants` 数组；结构不完整、JSON 无效、读取失败或保存失败都会明确提示错误，不会报告为成功追加。如果数据包中的比赛 ID 在本地已全部存在，即使个人曲线的参赛场数小于数据包场数，也不会重复载入这些比赛。
 
 ---
 
@@ -226,7 +228,7 @@ window.GOJAtCoderRating.appendContestPackage(contestPackage)
 当前版本：
 
 ```text
-v1.1.3
+v1.1.4
 ```
 
 主要功能：
