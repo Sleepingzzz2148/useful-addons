@@ -56,6 +56,8 @@
 
     const STORAGE_KEY = 'goj_atcoder_rating_db_v1';
     const DB_VERSION = 1;
+    const CONTEST_PACKAGE_FORMAT = 'goj-atcoder-rating-contest-package';
+    const CONTEST_PACKAGE_VERSION = 1;
     const CENTER = 1000;
     const RATED_BOUND = 3999;
     const PERF_LOW = -10000;
@@ -112,6 +114,120 @@
             error('Failed to save localStorage database.', e);
             return false;
         }
+    }
+
+    function deepClone(value) {
+        return JSON.parse(JSON.stringify(value));
+    }
+
+    function normalizeContestId(contestId) {
+        return String(contestId == null ? '' : contestId).trim();
+    }
+
+    function stableJson(value) {
+        if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
+        if (!value || typeof value !== 'object') return JSON.stringify(value);
+        return `{${Object.keys(value).sort().map(key => `${JSON.stringify(key)}:${stableJson(value[key])}`).join(',')}}`;
+    }
+
+    function buildContestPackage(db = loadDb()) {
+        const contests = Object.create(null);
+        for (const [rawContestId, rawContest] of Object.entries(normalizeDb(db).contests || {})) {
+            const contestId = normalizeContestId(rawContestId);
+            if (!contestId) continue;
+            const contest = deepClone(rawContest);
+            contest.contestId = contestId;
+            if (Object.prototype.hasOwnProperty.call(contests, contestId)
+                && stableJson(contests[contestId]) !== stableJson(contest)) {
+                throw new Error(`本地数据库中 contestId ${contestId} 存在内容不一致的重复数据。`);
+            }
+            Object.defineProperty(contests, contestId, {
+                value: contest,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
+        }
+        return {
+            format: CONTEST_PACKAGE_FORMAT,
+            version: CONTEST_PACKAGE_VERSION,
+            sourceDbVersion: DB_VERSION,
+            exportedAt: new Date().toISOString(),
+            contests,
+        };
+    }
+
+    function parseContestPackage(jsonOrObject) {
+        let parsed;
+        try {
+            parsed = typeof jsonOrObject === 'string' ? JSON.parse(jsonOrObject) : jsonOrObject;
+        } catch (e) {
+            throw new Error(`比赛数据包不是有效 JSON：${e.message || e}`);
+        }
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('比赛数据包必须是对象。');
+        if (parsed.format !== CONTEST_PACKAGE_FORMAT) throw new Error('比赛数据包格式不受支持。');
+        if (parsed.version !== CONTEST_PACKAGE_VERSION) throw new Error(`比赛数据包版本不受支持：${parsed.version}`);
+        if (!parsed.contests || typeof parsed.contests !== 'object' || Array.isArray(parsed.contests)) throw new Error('比赛数据包缺少 contests 对象。');
+
+        const contests = Object.create(null);
+        for (const [rawContestId, rawContest] of Object.entries(parsed.contests)) {
+            const contestId = normalizeContestId(rawContestId);
+            if (!contestId) throw new Error('比赛数据包包含空 contestId。');
+            if (!rawContest || typeof rawContest !== 'object' || Array.isArray(rawContest)) throw new Error(`比赛 ${contestId} 的原始数据无效。`);
+            if (!Array.isArray(rawContest.participants)) throw new Error(`比赛 ${contestId} 缺少有效的 participants 数组。`);
+            const embeddedContestId = normalizeContestId(rawContest.contestId);
+            if (embeddedContestId && embeddedContestId !== contestId) throw new Error(`比赛键 ${contestId} 与数据内 contestId ${embeddedContestId} 不一致。`);
+            const contest = deepClone(rawContest);
+            contest.contestId = contestId;
+            if (Object.prototype.hasOwnProperty.call(contests, contestId)
+                && stableJson(contests[contestId]) !== stableJson(contest)) {
+                throw new Error(`比赛数据包中 contestId ${contestId} 存在内容不一致的重复数据。`);
+            }
+            Object.defineProperty(contests, contestId, {
+                value: contest,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
+        }
+        return { ...parsed, contests };
+    }
+
+    function appendContestPackage(jsonOrObject) {
+        const contestPackage = parseContestPackage(jsonOrObject);
+        const db = loadDb();
+        const localContests = new Map();
+        for (const [rawContestId, contest] of Object.entries(db.contests || {})) {
+            const contestId = normalizeContestId(rawContestId);
+            if (!contestId) continue;
+            if (localContests.has(contestId) && stableJson(localContests.get(contestId)) !== stableJson(contest)) {
+                throw new Error(`本地数据库中 contestId ${contestId} 存在内容不一致的重复数据。`);
+            }
+            localContests.set(contestId, contest);
+        }
+        const stats = { added: 0, skipped: 0, conflicts: 0, total: Object.keys(contestPackage.contests).length };
+        for (const [contestId, contest] of Object.entries(contestPackage.contests)) {
+            const existing = localContests.get(contestId);
+            if (existing) {
+                stats.skipped++;
+                if (stableJson(existing) !== stableJson(contest)) stats.conflicts++;
+                continue;
+            }
+            Object.defineProperty(db.contests, contestId, {
+                value: contest,
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
+            localContests.set(contestId, contest);
+            stats.added++;
+        }
+        if (stats.added > 0) {
+            const next = recalculateDb(db);
+            if (!saveDb(next)) throw new Error('比赛数据追加失败：保存本地数据库失败。');
+            scheduleApply();
+        }
+        return stats;
     }
 
     function resetDb() {
@@ -1278,9 +1394,54 @@
         const allRecordsSig = Object.values(db.records || {}).map(r => `${r.contestId}:${r.userId}:${r.time}:${r.oldRating}:${r.newRating}:${r.performance}:${r.rank}:${r.score}`).sort().join('|');
         if (box.dataset.recordsSig === allRecordsSig && box.querySelector(`.${SCRIPT_PREFIX}-chart-viewport`)) return;
         box.dataset.recordsSig = allRecordsSig;
-        box.innerHTML = '<div class="section__header"><div class="section__title goj-acr-chart-title-row"><button type="button" class="button goj-acr-rank-btn">显示排行榜</button><h1>GOJ Rating</h1></div></div><div class="section__body"></div>';
+        box.innerHTML = `<div class="section__header"><div class="section__title ${SCRIPT_PREFIX}-chart-title-row"><button type="button" class="button ${SCRIPT_PREFIX}-rank-btn">显示排行榜</button><button type="button" class="button ${SCRIPT_PREFIX}-contest-export-btn">导出比赛数据包</button><button type="button" class="button ${SCRIPT_PREFIX}-contest-import-btn">追加比赛包</button><input type="file" accept="application/json,.json" class="${SCRIPT_PREFIX}-contest-import-input" hidden><h1>GOJ Rating</h1></div></div><div class="section__body"></div>`;
         const rankBtn = box.querySelector(`.${SCRIPT_PREFIX}-rank-btn`);
         if (rankBtn) rankBtn.addEventListener('click', () => showLeaderboard(loadDb()));
+        const exportBtn = box.querySelector(`.${SCRIPT_PREFIX}-contest-export-btn`);
+        const importBtn = box.querySelector(`.${SCRIPT_PREFIX}-contest-import-btn`);
+        const importInput = box.querySelector(`.${SCRIPT_PREFIX}-contest-import-input`);
+        if (exportBtn) exportBtn.addEventListener('click', () => {
+            try {
+                const content = JSON.stringify(buildContestPackage(loadDb()), null, 2);
+                const blob = new Blob([content], { type: 'application/json' });
+                const link = document.createElement('a');
+                const date = new Date().toISOString().slice(0, 10);
+                link.href = URL.createObjectURL(blob);
+                link.download = `goj-atcoder-rating-contests-${date}.json`;
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                setTimeout(() => URL.revokeObjectURL(link.href), 0);
+            } catch (e) {
+                error('Failed to export contest package.', e);
+                alert(`导出比赛数据包失败：${e.message || e}`);
+            }
+        });
+        if (importBtn && importInput) {
+            importBtn.addEventListener('click', () => importInput.click());
+            importInput.addEventListener('change', async () => {
+                const file = importInput.files && importInput.files[0];
+                importInput.value = '';
+                if (!file) return;
+                let content;
+                try {
+                    content = await file.text();
+                } catch (e) {
+                    error('Failed to read contest package file.', e);
+                    alert(`读取比赛数据包失败：${e.message || e}`);
+                    return;
+                }
+                try {
+                    const stats = appendContestPackage(content);
+                    const conflictText = stats.conflicts ? `，其中 ${stats.conflicts} 场内容不同，已保留本地数据` : '';
+                    alert(stats.added ? `已追加 ${stats.added} 场比赛，跳过 ${stats.skipped} 场${conflictText}。rating 已重算。` : `未追加新比赛，跳过 ${stats.skipped} 场${conflictText}。`);
+                    if (stats.added) injectUserChart(loadDb());
+                } catch (e) {
+                    error('Failed to append contest package.', e);
+                    alert(`追加比赛包失败：${e.message || e}`);
+                }
+            });
+        }
         const body = box.querySelector('.section__body');
         if (!records.length) {
             const p = document.createElement('p');
@@ -1456,8 +1617,10 @@
     }
 
     window.GOJAtCoderRating = {
-        constants: { CENTER, RATED_BOUND, PERF_LOW, PERF_HIGH, STORAGE_KEY },
+        constants: { CENTER, RATED_BOUND, PERF_LOW, PERF_HIGH, STORAGE_KEY, CONTEST_PACKAGE_FORMAT, CONTEST_PACKAGE_VERSION },
         exportData() { return JSON.parse(JSON.stringify(loadDb())); },
+        exportContestPackage() { return buildContestPackage(loadDb()); },
+        appendContestPackage,
         importData(data) {
             const parsed = typeof data === 'string' ? JSON.parse(data) : data;
             const next = recalculateDb(normalizeDb(parsed));
